@@ -1,40 +1,128 @@
-# Shadow SVN v2.8 [Cloud Edition]
-> The Fastest, Most Autonomous SVN Local Mirroring Engine. Built for Precision DevOps.
+# Shadow SVN
 
-Shadow SVN is a premium engineering tool designed to transform slow, massive SVN repositories into highly focused, isolated, and lightning-fast **Local Shadow Mirrors**.
+> **v0.1.0** · Free & Open Source · MIT License
 
-## 🚀 Quick Start (One-Liner Installation)
+A lightweight, autonomous SVN mirroring engine. Clone any remote SVN repository to a fast, fully functional local mirror — with zero manual configuration after setup.
 
-Install Shadow SVN and its entire ecosystem with a single command:
+---
 
-### 🛡️ Windows (PowerShell)
+## 🇬🇧 English
+
+### The Problem
+
+Working with large or remote SVN repositories is slow. Every checkout, update, or branch switch hits the remote server. When the server is down or the network is slow, development stops entirely.
+
+### The Solution
+
+Shadow SVN creates and maintains a **local mirror** of any SVN repository. Your tools (IDE, TortoiseSVN, Jenkins) connect to the local mirror instead of the remote. Syncing happens automatically in the background.
+
+- ✅ Any SVN URL supported (root, trunk, branch, tag)
+- ✅ Automatic background sync (configurable interval)
+- ✅ Smart credential caching — enter once per server, reused across all projects
+- ✅ Web dashboard for managing mirrors
+- ✅ Fully portable — all data in one `./data` folder
+- ✅ Optional dashboard password (default: `admin`)
+
+### Quick Start
+
+**Requirements:** Git, Docker Desktop
+
+**Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/cihadkocasahan/Shadow-SVN/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/cihadkocasahan/shadow-svn/main/install.ps1 | iex
 ```
 
-### 🐧 Linux / macOS (Bash)
+**Linux / macOS:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/cihadkocasahan/Shadow-SVN/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/cihadkocasahan/shadow-svn/main/install.sh | bash
 ```
 
+Or clone and run manually:
+```bash
+git clone https://github.com/cihadkocasahan/shadow-svn.git
+cd shadow-svn
+./setup.sh        # Linux/macOS
+.\setup.ps1       # Windows
+```
+
+### Usage
+
+1. Open the dashboard: `http://localhost:13081`
+2. Login (default password: `admin`)
+3. Click **+ Add Mirror**, enter the remote SVN URL and a project name
+4. Your local checkout URL: `svn://localhost:13080/<ProjectName>`
+
+### Tech Stack
+
+- **App:** Python 3 · Flask · APScheduler · Gunicorn
+- **Server:** Apache SVN · elleflorio/svn-server
+- **Infrastructure:** Docker · Docker Compose
+
 ---
 
-## 💎 Core Capabilities
-- **Universal Project Manager:** Dynamically host any SVN URL (Root, Trunk, Branch, or Tag).
-- **Smart Auth Engine:** Intelligent URL-based credential caching and inheritance.
-- **Fire Sync (Accelerator):** High-frequency mirroring engine (configurable down to seconds).
-- **Precision UI:** Professional dashboard with real-time telemetry and status mapping.
-- **Portable Architecture:** Unified `./data` structure with auto-initialization for "Git-Clone-and-Go" experience.
-- **Security:** Optional Dashboard Authentication layer for protected environments.
+## 🇹🇷 Türkçe
 
-## 🛠️ Infrastructure
-- **Hub Engine:** Python / Flask / APScheduler / Gunicorn (High Availability)
-- **Hub Server:** SVN / Apache / s6-overlay
-- **Deployment:** Docker & Docker Compose (Optimized for performance)
+### Problem
 
-## 📡 Local Integration
-Once mirrored, your repositories are available locally for instant IDE/Jenkins/TortoiseSVN integration:
-`svn://localhost:13080/[ProjectName]`
+Büyük veya uzak SVN depolarıyla çalışmak yavaştır. Her checkout, güncelleme veya dal değişimi uzak sunucuya bağlanmak zorunda kalır. Sunucu erişilemez olduğunda ya da ağ yavaş çalıştığında geliştirme tamamen durur.
+
+### Çözüm
+
+Shadow SVN, herhangi bir SVN deposunun **yerel bir aynasını (mirror)** oluşturur ve otomatik olarak güncel tutar. IDE, TortoiseSVN veya Jenkins gibi araçlarınız uzak sunucu yerine yerel aynaya bağlanır. Senkronizasyon arka planda otomatik gerçekleşir.
+
+- ✅ Her türlü SVN URL desteklenir (root, trunk, branch, tag)
+- ✅ Otomatik arka plan senkronizasyonu (ayarlanabilir aralık)
+- ✅ Akıllı kimlik bilgisi önbelleği — sunucu başına bir kez girilir, tüm projelerde geçerlidir
+- ✅ Ayna projelerini yönetmek için web arayüzü
+- ✅ Tamamen taşınabilir — tüm veriler `./data` klasöründe
+- ✅ Opsiyonel dashboard şifresi (varsayılan: `admin`)
+
+### Hızlı Kurulum
+
+**Gereksinimler:** Git, Docker Desktop
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/cihadkocasahan/shadow-svn/main/install.ps1 | iex
+```
+
+**Linux / macOS:**
+```bash
+curl -sSL https://raw.githubusercontent.com/cihadkocasahan/shadow-svn/main/install.sh | bash
+```
+
+Ya da manuel kurulum:
+```bash
+git clone https://github.com/cihadkocasahan/shadow-svn.git
+cd shadow-svn
+./setup.sh        # Linux/macOS
+.\setup.ps1       # Windows
+```
+
+### Kullanım
+
+1. Arayüzü açın: `http://localhost:13081`
+2. Giriş yapın (varsayılan şifre: `admin`)
+3. **+ Yeni Ayna Ekle** butonuna tıklayın, uzak SVN URL'sini ve proje adını girin
+4. Yerel checkout URL'niz: `svn://localhost:13080/<ProjeAdı>`
 
 ---
-*Architected with precision for high-performance development environments.*
+
+## Contributing / Katkıda Bulunun
+
+Contributions are welcome! Feel free to open an issue or submit a pull request.  
+Katkılarınızı bekliyoruz! Issue açabilir veya pull request gönderebilirsiniz.
+
+- 🐛 **Bug Report / Hata Bildirimi:** [GitHub Issues](https://github.com/cihadkocasahan/shadow-svn/issues)
+- 💡 **Feature Request / Özellik İsteği:** [GitHub Issues](https://github.com/cihadkocasahan/shadow-svn/issues)
+- 🔀 **Pull Request:** Always welcome
+
+## Developer / Geliştirici
+
+**Cihad Kocasahan**  
+[github.com/cihadkocasahan](https://github.com/cihadkocasahan)
+
+---
+
+*Shadow SVN is free software released under the MIT License.*  
+*Shadow SVN, MIT Lisansı kapsamında yayımlanan ücretsiz bir yazılımdır.*
