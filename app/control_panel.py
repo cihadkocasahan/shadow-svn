@@ -45,6 +45,7 @@ _FERNET = _load_fernet()  # load once at startup
 DATA_ROOT = "/data"
 REPO_ROOT = os.path.join(DATA_ROOT, "svn")
 CONFIG_FILE = os.path.join(DATA_ROOT, "config.json")
+ACTIVE_SYNCS = set() # Track running tasks globally
 
 os.makedirs(REPO_ROOT, exist_ok=True)
 if not os.path.exists(CONFIG_FILE):
@@ -151,16 +152,20 @@ def ensure_project_repo(name, url, user=None, pwd=None):
     return True
 
 def run_sync_task(name):
+    if name in ACTIVE_SYNCS: return # Skip if already running
     config = load_config(); p_cfg = config["projects"].get(name)
     if not p_cfg: return
-    u, p = get_credentials(p_cfg, config); path = os.path.join(REPO_ROOT, name)
+    ACTIVE_SYNCS.add(name)
     try:
+        u, p = get_credentials(p_cfg, config); path = os.path.join(REPO_ROOT, name)
         subprocess.check_output(["svnsync", "sync", f"file://{path}", "--source-username", u, "--source-password", p, "--non-interactive", "--trust-server-cert"], stderr=subprocess.STDOUT)
         rev, msg, auth = get_local_info(name)
         p_cfg.update({"last_local_rev": rev, "last_msg": msg, "local_author": auth})
         save_config(config)
     except subprocess.CalledProcessError as e:
         if "lock" in e.output.decode().lower(): subprocess.run(["svn", "propdel", "svn:sync-lock", "--revprop", "-r", "0", f"file://{path}", "--non-interactive"])
+    finally:
+        ACTIVE_SYNCS.remove(name) if name in ACTIVE_SYNCS else None
 
 def update_scheduler():
     config = load_config(); scheduler.remove_all_jobs()
@@ -180,9 +185,10 @@ def api_projects_manager():
             now = time.time(); ttl = 60; last_check = p.get("last_remote_check", 0)
             r_rev = p.get("last_remote_rev", "---"); r_auth = p.get("remote_author", "---")
             is_synced = (l_auth == r_auth) and (l_auth != "---")
+            is_running = name in ACTIVE_SYNCS
             # If disabled, we still want to show the status but we don't fetch remote info automatically
             if not p.get("enabled"):
-                out.append({"id": name, "url": p["url"], "enabled": False, "interval": p["interval"], "local": p.get("last_local_rev", "---"), "remote": r_rev, "message": p.get("last_msg", "..."), "is_synced": is_synced, "check_age": int(now - last_check), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
+                out.append({"id": name, "url": p["url"], "enabled": False, "interval": p["interval"], "local": p.get("last_local_rev", "---"), "remote": r_rev, "message": p.get("last_msg", "..."), "is_synced": is_synced, "is_running": is_running, "check_age": int(now - last_check), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
                 continue
 
             if now - last_check > ttl or r_rev == "---":
@@ -194,8 +200,10 @@ def api_projects_manager():
                     p.update({"last_remote_rev": r_rev, "last_remote_check": now, "remote_author": r_auth})
                     save_config(config)
                 except: pass
-            is_synced = (l_auth == r_auth) and (l_auth != "---"); display_rev = r_rev if is_synced else l_rev
-            out.append({"id": name, "url": p["url"], "enabled": p["enabled"], "interval": p["interval"], "local": display_rev, "remote": r_rev, "message": l_msg, "is_synced": is_synced, "check_age": int(now - p.get("last_remote_check", 0)), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
+            is_synced = (l_auth == r_auth) and (l_auth != "---")
+            is_running = name in ACTIVE_SYNCS
+            display_rev = r_rev if is_synced else l_rev
+            out.append({"id": name, "url": p["url"], "enabled": p["enabled"], "interval": p["interval"], "local": display_rev, "remote": r_rev, "message": l_msg, "is_synced": is_synced, "is_running": is_running, "check_age": int(now - p.get("last_remote_check", 0)), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
         return jsonify(out)
     else:
         data = request.json
@@ -319,6 +327,8 @@ HTML_TEMPLATE = """
         .scheduler-off { background: #ECEFF1; color: #546E7A; border: 1px solid #CFD8DC; }
         .sync-badge { font-size: 10px; font-weight: 900; padding: 4px 10px; border-radius: 12px; background: #EEE; color: #777; }
         .synced { background: #E8F5E9; color: var(--synced-green); display: block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .spin { animation: spin 2s linear infinite; display: inline-block; }
         .stat-line { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: baseline; }
         .val { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 900; color: var(--brand-primary); }
         .msg-box { background: #F8FAFC; border-radius: 10px; padding: 12px; font-size: 12px; height: 100px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 15px; border: 1px solid #E2EBF1; color: var(--text-main); line-height: 1.4; }
@@ -328,9 +338,13 @@ HTML_TEMPLATE = """
         .btn-copy:hover { background: var(--brand-primary); color: white; }
         .ctrls { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
         .add-card { border: 2px dashed var(--brand-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: rgba(2, 136, 209, 0.03); min-height: 400px; }
-        button { border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase; white-space: nowrap; }
-        .btn-fire { background: var(--accent-fire); color: white; }
-        .btn-del { background: #fee2e2; color: #dc2626; }
+        button { border: none; padding: 10px; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase; white-space: nowrap; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .btn-fire { background: var(--accent-fire); color: white; width: 44px; height: 44px; }
+        .btn-del { background: #fee2e2; color: #dc2626; width: 44px; height: 44px; }
+        .btn-toggle { background: #EEE; color: #444; width: 44px; height: 44px; }
+        .btn-gear { background: #F1F5F9; color: #475569; width: 44px; height: 44px; }
+        button:hover { filter: brightness(0.9); transform: scale(1.05); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         modal { display:none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center; backdrop-filter: blur(4px); }
         .modal-content { background: white; padding: 40px; border-radius: 24px; width: 700px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
         .form-group { margin-bottom: 20px; text-align: left; }
@@ -416,6 +430,7 @@ HTML_TEMPLATE = """
                 const res = await fetch('/api/projects'); if(!res.ok) return;
                 const data = await res.json(); const grid = document.getElementById('project-grid'); grid.innerHTML = '';
                 data.forEach(p => {
+                    const runningIcon = p.is_running ? '<svg class="spin" style="width:12px;height:12px;margin-right:5px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>' : '';
                     grid.innerHTML += `
                         <div class="card ${p.enabled ? '' : 'disabled'}">
                             <div class="card-header">
@@ -427,7 +442,7 @@ HTML_TEMPLATE = """
                                     </div>
                                     <div style="font-size:9px; font-weight:900; color:var(--brand-primary); margin-top:4px;">⏱️ Her ${p.interval/60} dk bir.</div>
                                 </div>
-                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNCEL' : 'SYNC...'}</span>
+                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${runningIcon} ${p.is_synced ? '✓ GÜNCEL' : 'SYNC...'}</span>
                             </div>
                             <div class="stat-line">
                                 <div><span style="font-size:10px; font-weight:900; color:#AAA;">LOKAL</span><div class="val">${p.local}</div></div>
@@ -436,13 +451,21 @@ HTML_TEMPLATE = """
                             <div class="msg-box">${p.message}</div>
                             <div class="url-row">
                                 <span class="url-text">${p.checkout_url}</span>
-                                <button class="btn-copy" onclick="copyTo('${p.checkout_url}')">KOPYALA</button>
+                                <button class="btn-copy" onclick="copyTo('${p.checkout_url}')" title="Kopyala"><svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
                             </div>
                             <div class="ctrls">
-                                <button class="btn-fire" onclick="manualSync('${p.id}')">HEMEN SYNC</button>
-                                <button style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')">${p.enabled ? 'DURAKLAT' : 'DEVAM ET'}</button>
-                                <button style="background:#F1F5F9; color:#475569;" onclick="openEdit('${p.id}', ${p.interval/60})">⚙️</button>
-                                <button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button>
+                                <button class="btn-fire" onclick="manualSync('${p.id}')" ${p.is_running ? 'disabled' : ''} title="Hemen Sync">
+                                    <svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                </button>
+                                <button class="btn-toggle" style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')" title="${p.enabled ? 'Duraklat' : 'Devam Et'}">
+                                    ${p.enabled ? '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>' : '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"></path></svg>'}
+                                </button>
+                                <button class="btn-gear" onclick="openEdit('${p.id}', ${p.interval/60})" title="Ayarlar">
+                                    <svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                </button>
+                                <button class="btn-del" onclick="deleteProject('${p.id}')" title="Sil">
+                                    <svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                </button>
                             </div>
                         </div>`;
                 });
