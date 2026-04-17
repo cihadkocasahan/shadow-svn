@@ -325,7 +325,7 @@ HTML_TEMPLATE = """
         .btn-copy:hover { background: var(--brand-primary); color: white; }
         .ctrls { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
         .add-card { border: 2px dashed var(--brand-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: rgba(2, 136, 209, 0.03); min-height: 400px; }
-        button { border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+        button { border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase; white-space: nowrap; }
         .btn-fire { background: var(--accent-fire); color: white; }
         .btn-del { background: #fee2e2; color: #dc2626; }
         modal { display:none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center; backdrop-filter: blur(4px); }
