@@ -22,7 +22,7 @@ services:
 
   sync-engine:
     build: 
-      context: ./hub-engine
+      context: ./app
       dockerfile: Dockerfile
     container_name: Shadow-Sync-Engine
     restart: always
