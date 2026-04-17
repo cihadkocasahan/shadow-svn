@@ -383,7 +383,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container header">
-        <a href="/" style="text-decoration:none;"><h1 style="font-weight:900; color:var(--brand-deep); margin:0; cursor:pointer;">Shadow SVN <span style="font-size:12px; opacity:0.6;">v0.1.1</span></h1></a>
+        <a href="/" style="text-decoration:none;"><h1 style="font-weight:900; color:var(--brand-deep); margin:0; cursor:pointer;">Shadow SVN <span style="font-size:12px; opacity:0.6;">v0.1.2</span></h1></a>
         <div style="font-size: 11px; font-weight:900; color:var(--text-muted); text-align:right; display: flex; align-items: center; gap: 10px;" id="header-actions">
             <span id="status-dot">● ACTIVE</span>
             <button onclick="openSettings()" style="padding:4px 8px; font-size:9px; background:#EEE;">AYARLAR ⚙️</button>
