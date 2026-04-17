@@ -218,15 +218,16 @@ def api_delete_project(name):
 def api_settings():
     config = load_config()
     if request.method == 'GET':
-        active = config.get("dashboard_pass") or DEFAULT_PASS
-        return jsonify({"dashboard_pass_set": True, "is_default": not bool(config.get("dashboard_pass"))})
+        return jsonify({"dashboard_pass_set": bool(config.get("dashboard_pass"))})
     else:
         data = request.json
         new_pass = data.get("dashboard_pass", "").strip()
-        # Empty = reset to default (admin)
         config["dashboard_pass"] = new_pass
         save_config(config)
-        return jsonify({"status": "saved", "is_default": not bool(new_pass)})
+        # Clear session if password removed (open access restored)
+        if not new_pass:
+            session.pop('authorized', None)
+        return jsonify({"status": "saved", "pass_set": bool(new_pass)})
 
 @app.route('/api/sync/manual', methods=['POST'])
 def api_manual_sync():
@@ -306,11 +307,11 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container header">
-        <h1 style="font-weight:900; color:var(--brand-deep); margin:0;">Shadow SVN <span style="font-size:12px; opacity:0.6;">v2.7 Security Edition</span></h1>
-        <div style="font-size: 11px; font-weight:900; color:var(--text-muted); text-align:right;">
-            SVN ENGINE: OPERATIONAL<br>
-            <button onclick="openSettings()" style="padding:4px 8px; font-size:9px; background:#EEE; margin-top:5px;">HUB AYARLARI ⚙️</button>
-            <button onclick="location.href='/api/auth/logout'" style="padding:4px 8px; font-size:9px; background:#FEE2E2; color:#DC2626;">ÇIKIŞ</button>
+        <h1 style="font-weight:900; color:var(--brand-deep); margin:0;">Shadow SVN <span style="font-size:12px; opacity:0.6;">v0.1.1</span></h1>
+        <div style="font-size: 11px; font-weight:900; color:var(--text-muted); text-align:right;" id="header-actions">
+            <span id="status-dot">● ACTIVE</span><br>
+            <button onclick="openSettings()" style="padding:4px 8px; font-size:9px; background:#EEE; margin-top:5px;">AYARLAR ⚙️</button>
+            <button id="btn-logout" onclick="location.href='/api/auth/logout'" style="padding:4px 8px; font-size:9px; background:#FEE2E2; color:#DC2626; display:none;">ÇIKIŞ</button>
         </div>
     </div>
     <div class="container grid" id="project-grid"></div>
@@ -373,11 +374,19 @@ HTML_TEMPLATE = """
             if(res.ok) { closeModal('add-modal'); loadProjects(); } else { alert("Hata: " + (await res.json()).error); }
         }
         async function saveSettings() {
-            const payload = { dashboard_pass: document.getElementById('s-pass').value };
-            await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-            alert("Ayarlar Kaydedildi! Şifre değiştiyse tekrar giriş yapmanız gerekebilir.");
-            location.reload();
+            const newPass = document.getElementById('s-pass').value;
+            const res = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dashboard_pass: newPass}) });
+            const result = await res.json();
+            closeModal('settings-modal');
+            // Show/hide logout button based on password
+            document.getElementById('btn-logout').style.display = result.pass_set ? 'inline-block' : 'none';
+            if (!result.pass_set) { alert('Şifre kaldırıldı. Dashboard artık herkese açık.'); }
+            else { alert('Şifre kaydedildi.'); }
         }
+        // Init: show logout button only if password is set
+        fetch('/api/settings').then(r=>r.json()).then(s=>{
+            document.getElementById('btn-logout').style.display = s.dashboard_pass_set ? 'inline-block' : 'none';
+        });
         async function manualSync(id) { await fetch('/api/sync/manual?name=' + id, { method:'POST' }); alert("Senkronizasyon Başladı!"); }
         async function deleteProject(id) { if(confirm(id + " silinsin mi?")) { await fetch('/api/projects/'+id, { method:'DELETE' }); loadProjects(); } }
         setInterval(loadProjects, 5000); loadProjects();
