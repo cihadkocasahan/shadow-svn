@@ -303,6 +303,10 @@ HTML_TEMPLATE = """
         .form-group { margin-bottom: 20px; text-align: left; }
         .form-label { font-size: 12px; font-weight: 900; color: var(--brand-deep); margin-bottom: 8px; display: block; text-transform: uppercase; }
         input { width: 100%; padding: 14px; border-radius: 12px; border: 2px solid #E2EBF1; font-weight: 600; font-size: 14px; }
+        .modal-footer { display:flex; gap:10px; margin-top:20px; }
+        /* Toast */
+        #toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(20px); background:#1e293b; color:white; padding:12px 24px; border-radius:12px; font-size:13px; font-weight:700; opacity:0; transition:all 0.3s; z-index:999; pointer-events:none; }
+        #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
     </style>
 </head>
 <body>
@@ -314,6 +318,7 @@ HTML_TEMPLATE = """
             <button id="btn-logout" onclick="location.href='/api/auth/logout'" style="padding:4px 8px; font-size:9px; background:#FEE2E2; color:#DC2626; display:none;">ÇIKIŞ</button>
         </div>
     </div>
+    <div id="toast"></div>
     <div class="container grid" id="project-grid"></div>
 
     <modal id="add-modal">
@@ -344,6 +349,11 @@ HTML_TEMPLATE = """
     </modal>
 
     <script>
+        function showToast(msg, duration=3000) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), duration);
+        }
         async function loadProjects() {
             try {
                 const res = await fetch('/api/projects'); if(!res.ok) return;
@@ -353,7 +363,7 @@ HTML_TEMPLATE = """
                         <div class="card">
                             <div class="card-header">
                                 <div><span class="project-name">${p.id}</span><div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div></div>
-                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNCEL' : 'SENKRONİZE OLUYOR'}</span>
+                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNEL' : 'SYNC...'}</span>
                             </div>
                             <div class="stat-line">
                                 <div><span style="font-size:10px; font-weight:900; color:#AAA;">LOKAL</span><div class="val">${p.local}</div></div>
@@ -378,12 +388,12 @@ HTML_TEMPLATE = """
                 username: document.getElementById('p-user').value,
                 password: document.getElementById('p-pass').value
             };
-            if (!payload.name || !payload.url) { alert('Proje adı ve URL zorunludur.'); return; }
+            if (!payload.name || !payload.url) { showToast('⚠️ Proje adı ve URL zorunludur.'); return; }
             const res = await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-            if(res.ok) { closeModal('add-modal'); loadProjects(); }
+            if(res.ok) { closeModal('add-modal'); showToast('✅ Proje eklendi, senkronizasyon başlıyor...'); loadProjects(); }
             else {
                 const err = await res.json();
-                alert('Hata: ' + (err.error || 'Repo oluşturulamadı. SVN URL ve kimlik bilgilerini kontrol edin.'));
+                showToast('❌ ' + (err.error || 'SVN URL ve kimlik bilgilerini kontrol edin.'));
             }
         }
         async function saveSettings() {
@@ -391,17 +401,23 @@ HTML_TEMPLATE = """
             const res = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dashboard_pass: newPass}) });
             const result = await res.json();
             closeModal('settings-modal');
-            // Show/hide logout button based on password
-            document.getElementById('btn-logout').style.display = result.pass_set ? 'inline-block' : 'none';
-            if (!result.pass_set) { alert('Şifre kaldırıldı. Dashboard artık herkese açık.'); }
-            else { alert('Şifre kaydedildi.'); }
+            showToast(newPass ? '✅ Şifre kaydedildi.' : '✅ Şifre kaldırıldı, dashboard açık.');
+            setTimeout(() => location.reload(), 1000);
         }
-        // Init: show logout button only if password is set
+        // Init: show logout only if password is set
         fetch('/api/settings').then(r=>r.json()).then(s=>{
             document.getElementById('btn-logout').style.display = s.dashboard_pass_set ? 'inline-block' : 'none';
         });
-        async function manualSync(id) { await fetch('/api/sync/manual?name=' + id, { method:'POST' }); alert("Senkronizasyon Başladı!"); }
-        async function deleteProject(id) { if(confirm(id + " silinsin mi?")) { await fetch('/api/projects/'+id, { method:'DELETE' }); loadProjects(); } }
+        async function manualSync(id) {
+            await fetch('/api/sync/manual?name=' + id, { method:'POST' });
+            showToast('⚡ Senkronizasyon tetiklendi: ' + id);
+        }
+        async function deleteProject(id) {
+            if(!confirm(id + ' silinsin mi?')) return;
+            await fetch('/api/projects/'+id, { method:'DELETE' });
+            showToast('🗑️ ' + id + ' silindi.');
+            loadProjects();
+        }
         setInterval(loadProjects, 5000); loadProjects();
     </script>
 </body>
