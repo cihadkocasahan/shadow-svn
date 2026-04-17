@@ -1,0 +1,43 @@
+name: shadow-svn
+version: "3"
+
+networks:
+  shadow-sync-net:
+    driver: bridge
+
+services:
+  shadow-server:
+    image: elleflorio/svn-server
+    container_name: Shadow-Server
+    restart: always
+    ports:
+      - "13080:80"
+      - "3690:3690"
+    hostname: shadow-server
+    volumes:
+      - ./data/svn:/home/svn
+      - ./server/apache-servername.conf:/etc/apache2/conf.d/servername.conf:ro
+    networks:
+      - shadow-sync-net
+
+  sync-engine:
+    # Pull from GHCR (no source code needed):
+    image: ghcr.io/cihadkocasahan/shadow-svn:latest
+    # Or build from source (comment out image, uncomment build):
+    # build:
+    #   context: ./app
+    #   dockerfile: Dockerfile
+    container_name: Shadow-Sync-Engine
+    restart: always
+    ports:
+      - "13081:80"
+    environment:
+      - SVN_USER=${SVN_USER}
+      - SVN_PASS=${SVN_PASS}
+      - TZ=Europe/Istanbul
+    volumes:
+      - ./data:/data
+    networks:
+      - shadow-sync-net
+    depends_on:
+      - shadow-server

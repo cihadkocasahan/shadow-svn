@@ -1,0 +1,390 @@
+import os
+import subprocess
+import json
+import shutil
+import time
+import threading
+from urllib.parse import urlparse
+from flask import Flask, jsonify, render_template_string, request, session, redirect, url_for
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)
+
+# --- ENCRYPTED .ENV READER (v3.1) ---
+# Reads data/.secret.key and transparently decrypts env vars set by setup scripts.
+# Falls back gracefully to plain-text values if no key exists.
+def _load_fernet():
+    key_path = "/data/.secret.key"
+    if not os.path.exists(key_path):
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        with open(key_path, "rb") as f:
+            return Fernet(f.read())
+    except Exception:
+        return None
+
+def _decrypt_env(name):
+    """Return decrypted value of an env variable, or the raw value if not encrypted."""
+    raw = os.environ.get(name, "")
+    if not raw:
+        return raw
+    fernet = _load_fernet()
+    if fernet is None:
+        return raw
+    try:
+        return fernet.decrypt(raw.encode()).decode()
+    except Exception:
+        return raw  # plain-text fallback
+
+_FERNET = _load_fernet()  # load once at startup
+
+# --- PORTABLE CONFIG & PATHS (v2.7) ---
+DATA_ROOT = "/data"
+REPO_ROOT = os.path.join(DATA_ROOT, "svn")
+CONFIG_FILE = os.path.join(DATA_ROOT, "config.json")
+
+os.makedirs(REPO_ROOT, exist_ok=True)
+if not os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump({"projects": {}, "credentials": {}, "dashboard_pass": ""}, f, indent=4)
+
+config_lock = threading.Lock()
+
+# v3.1.0 - Shadow SVN [Encrypted .env + Security]
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+def load_config():
+    with config_lock:
+        if not os.path.exists(CONFIG_FILE): return {"projects": {}, "credentials": {}, "dashboard_pass": ""}
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+                data.setdefault("projects", {})
+                data.setdefault("credentials", {})
+                data.setdefault("dashboard_pass", "")
+                return data
+        except: return {"projects": {}, "credentials": {}, "dashboard_pass": ""}
+
+def save_config(config):
+    with config_lock:
+        try:
+            with open(CONFIG_FILE, 'w') as f: json.dump(config, f, indent=4)
+        except: pass
+
+def get_domain(url):
+    try:
+        parsed = urlparse(url)
+        return f"{parsed.scheme}://{parsed.netloc}"
+    except: return url
+
+def get_credentials(project_cfg, config):
+    url = project_cfg.get("url", "")
+    domain = get_domain(url)
+    # Decrypt env vars transparently
+    env_user = _decrypt_env("SVN_USER")
+    env_pass = _decrypt_env("SVN_PASS")
+    u = project_cfg.get("username") or config.get("credentials", {}).get(domain, {}).get("u") or env_user
+    p = project_cfg.get("password") or config.get("credentials", {}).get(domain, {}).get("p") or env_pass
+    return u, p
+
+@app.before_request
+def check_auth():
+    if request.path in ['/login', '/api/auth/login'] or request.path.startswith('/static'): return
+    config = load_config()
+    if not config.get('dashboard_pass'): return  # No password set = open access
+    if not session.get('authorized'):
+        return redirect(url_for('login_page'))
+
+@app.route('/login')
+def login_page(): return render_template_string(LOGIN_TEMPLATE)
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    config = load_config()
+    data = request.json
+    if data.get('password') == config.get('dashboard_pass'):
+        session['authorized'] = True
+        return jsonify({'status': 'ok'})
+    return jsonify({'error': 'Geçersiz Şifre'}), 401
+
+@app.route('/api/auth/logout')
+def api_logout():
+    session.pop('authorized', None)
+    return redirect(url_for('login_page'))
+
+# --- CORE API ---
+
+def get_local_info(project_name):
+    path = os.path.join(REPO_ROOT, project_name)
+    if not os.path.exists(path): return "---", "...", "---"
+    try:
+        url = f"file://{path}"
+        info = subprocess.check_output(["svn", "info", url]).decode()
+        l_rev = [l for l in info.split('\n') if l.startswith("Last Changed Rev: ")][0].split(": ")[1]
+        msg = subprocess.check_output(["svnlook", "log", path, "-r", l_rev]).decode().strip()
+        auth = [l for l in info.split('\n') if l.startswith("Last Changed Author: ")][0].split(": ")[1].strip()
+        return l_rev, msg, auth
+    except: return "---", "...", "---"
+
+def ensure_project_repo(name, url, user=None, pwd=None):
+    path = os.path.join(REPO_ROOT, name)
+    if not os.path.exists(path):
+        try:
+            print(f"[Shadow SVN] Init: {name}")
+            subprocess.run(["svnadmin", "create", path], check=True)
+            hook = os.path.join(path, "hooks/pre-revprop-change")
+            with open(hook, 'w') as f: f.write("#!/bin/sh\nexit 0")
+            os.chmod(hook, 0o755)
+            u, p = user, pwd
+            if not u or not p:
+                config = load_config()
+                u, p = get_credentials({"url": url}, config)
+            subprocess.run(["svnsync", "init", f"file://{path}", url, "--source-username", u, "--source-password", p, "--non-interactive", "--trust-server-cert"], check=True)
+            return True
+        except:
+            if os.path.exists(path): shutil.rmtree(path)
+            return False
+    return True
+
+def run_sync_task(name):
+    config = load_config(); p_cfg = config["projects"].get(name)
+    if not p_cfg: return
+    u, p = get_credentials(p_cfg, config); path = os.path.join(REPO_ROOT, name)
+    try:
+        subprocess.check_output(["svnsync", "sync", f"file://{path}", "--source-username", u, "--source-password", p, "--non-interactive", "--trust-server-cert"], stderr=subprocess.STDOUT)
+        rev, msg, auth = get_local_info(name)
+        p_cfg.update({"last_local_rev": rev, "last_msg": msg, "local_author": auth})
+        save_config(config)
+    except subprocess.CalledProcessError as e:
+        if "lock" in e.output.decode().lower(): subprocess.run(["svn", "propdel", "svn:sync-lock", "--revprop", "-r", "0", f"file://{path}", "--non-interactive"])
+
+def update_scheduler():
+    config = load_config(); scheduler.remove_all_jobs()
+    for name, p in config["projects"].items():
+        if p.get("enabled"): scheduler.add_job(id=f"sync_{name}", func=run_sync_task, args=[name], trigger=IntervalTrigger(seconds=int(p['interval'])), replace_existing=True)
+
+@app.route('/')
+def home(): return render_template_string(HTML_TEMPLATE)
+
+@app.route('/api/projects', methods=['GET', 'POST'])
+def api_projects_manager():
+    config = load_config()
+    if request.method == 'GET':
+        out = []
+        for name, p in config["projects"].items():
+            l_rev, l_msg, l_auth = get_local_info(name)
+            now = time.time(); ttl = 60; last_check = p.get("last_remote_check", 0)
+            r_rev = p.get("last_remote_rev", "---"); r_auth = p.get("remote_author", "---")
+            if now - last_check > ttl or r_rev == "---":
+                try:
+                    u, pw = get_credentials(p, config)
+                    r_info = subprocess.check_output(["svn", "info", p["url"], "--username", u, "--password", pw, "--non-interactive", "--trust-server-cert"]).decode()
+                    r_rev = [l for l in r_info.split('\n') if l.startswith("Last Changed Rev: ")][0].split(": ")[1]
+                    r_auth = [l for l in r_info.split('\n') if l.startswith("Last Changed Author: ")][0].split(": ")[1].strip()
+                    p.update({"last_remote_rev": r_rev, "last_remote_check": now, "remote_author": r_auth})
+                    save_config(config)
+                except: pass
+            is_synced = (l_auth == r_auth) and (l_auth != "---"); display_rev = r_rev if is_synced else l_rev
+            out.append({"id": name, "url": p["url"], "enabled": p["enabled"], "interval": p["interval"], "local": display_rev, "remote": r_rev, "message": l_msg, "is_synced": is_synced, "check_age": int(now - p.get("last_remote_check", 0)), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
+        return jsonify(out)
+    else:
+        data = request.json
+        name = data["name"].strip().replace(" ", "_"); url = data["url"].strip()
+        if not name or not url: return jsonify({"error": "Geçersiz Veri"}), 400
+        is_new = name not in config["projects"]
+        if data.get("username") and data.get("password"):
+            domain = get_domain(url)
+            config.setdefault("credentials", {})[domain] = {"u": data["username"], "p": data["password"]}
+        config["projects"][name] = {"url": url, "interval": int(data.get("interval", 3600)), "enabled": data.get("enabled", True), "username": data.get("username", ""), "password": data.get("password", "")}
+        if is_new:
+            success = ensure_project_repo(name, url, data.get("username"), data.get("password"))
+            if not success: return jsonify({"error": "Repo Oluşturulamadı"}), 500
+        save_config(config); update_scheduler(); return jsonify({"status": "ok"})
+
+@app.route('/api/projects/<name>', methods=['DELETE'])
+def api_delete_project(name):
+    config = load_config()
+    if name in config["projects"]:
+        del config["projects"][name]; path = os.path.join(REPO_ROOT, name)
+        if os.path.exists(path): shutil.rmtree(path)
+        save_config(config); update_scheduler(); return jsonify({"status": "deleted"})
+    return jsonify({"error": "Not Found"}), 404
+
+@app.route('/api/settings', methods=['GET', 'POST'])
+def api_settings():
+    config = load_config()
+    if request.method == 'GET':
+        active = config.get("dashboard_pass") or DEFAULT_PASS
+        return jsonify({"dashboard_pass_set": True, "is_default": not bool(config.get("dashboard_pass"))})
+    else:
+        data = request.json
+        new_pass = data.get("dashboard_pass", "").strip()
+        # Empty = reset to default (admin)
+        config["dashboard_pass"] = new_pass
+        save_config(config)
+        return jsonify({"status": "saved", "is_default": not bool(new_pass)})
+
+@app.route('/api/sync/manual', methods=['POST'])
+def api_manual_sync():
+    name = request.args.get('name')
+    if name: threading.Thread(target=run_sync_task, args=(name,)).start()
+    return jsonify({"status": "Triggered"})
+
+# --- UI TEMPLATES (v2.7 Security & Optional Auth) ---
+
+LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'><title>Shadow SVN - Login</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #F0F4F8; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .login-card { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 400px; text-align: center; }
+        h1 { color: #01579B; font-weight: 900; margin-bottom: 8px; }
+        .hint { font-size: 11px; color: #90A4AE; font-weight: 700; margin-bottom: 28px; }
+        input { width: 100%; padding: 14px; margin-bottom: 16px; border-radius: 12px; border: 2px solid #E2EBF1; font-size: 16px; box-sizing: border-box; }
+        button { width: 100%; padding: 14px; background: #0288D1; color: white; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; font-size: 14px; }
+        .err { color: #dc2626; font-size: 12px; margin-top: 10px; font-weight: 700; display: none; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Shadow SVN</h1>
+        <p class="hint">Bu dashboard şifre korumalıdır.</p>
+        <input type="password" id="pw" placeholder="Şifre" onkeydown="if(event.key==='Enter') login()">
+        <button onclick="login()">GİRİŞ YAP</button>
+        <div class="err" id="err">❌ Geçersiz şifre</div>
+    </div>
+    <script>
+        async function login() {
+            const res = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password: document.getElementById('pw').value}) });
+            if(res.ok) location.href='/';
+            else { document.getElementById('err').style.display='block'; }
+        }
+    </script>
+</body>
+</html>
+"""
+
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang='tr'>
+<head>
+    <meta charset='UTF-8'><title>Shadow SVN v2.7</title>
+    <style>
+        :root { --brand-primary: #0288D1; --brand-deep: #01579B; --page-bg: #F0F4F8; --card-bg: #FFFFFF; --card-border: #D0DFE8; --text-main: #012B3D; --text-muted: #546E7A; --accent-fire: #FF5722; --synced-green: #2E7D32; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--page-bg); color: var(--text-main); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1200px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid var(--card-border); padding-bottom: 15px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+        .card { background: var(--card-bg); border-radius: 20px; border: 1px solid var(--card-border); padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+        .project-name { font-size: 18px; font-weight: 900; color: var(--brand-deep); text-transform: uppercase; }
+        .sync-badge { font-size: 10px; font-weight: 900; padding: 4px 10px; border-radius: 12px; background: #EEE; color: #777; }
+        .synced { background: #E8F5E9; color: var(--synced-green); display: block; }
+        .stat-line { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: baseline; }
+        .val { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 900; color: var(--brand-primary); }
+        .msg-box { background: #F8FAFC; border-radius: 10px; padding: 12px; font-size: 12px; height: 100px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 15px; border: 1px solid #E2EBF1; color: var(--text-main); line-height: 1.4; }
+        .url-row { font-size: 10px; font-family: monospace; background: #f1f5f9; padding: 10px; border-radius: 6px; margin-bottom: 15px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; border-left: 3px solid var(--brand-primary); }
+        .ctrls { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+        .add-card { border: 2px dashed var(--brand-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: rgba(2, 136, 209, 0.03); min-height: 400px; }
+        button { border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+        .btn-fire { background: var(--accent-fire); color: white; }
+        .btn-del { background: #fee2e2; color: #dc2626; }
+        modal { display:none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center; backdrop-filter: blur(4px); }
+        .modal-content { background: white; padding: 40px; border-radius: 24px; width: 700px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        .form-label { font-size: 12px; font-weight: 900; color: var(--brand-deep); margin-bottom: 8px; display: block; text-transform: uppercase; }
+        input { width: 100%; padding: 14px; border-radius: 12px; border: 2px solid #E2EBF1; font-weight: 600; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container header">
+        <h1 style="font-weight:900; color:var(--brand-deep); margin:0;">Shadow SVN <span style="font-size:12px; opacity:0.6;">v2.7 Security Edition</span></h1>
+        <div style="font-size: 11px; font-weight:900; color:var(--text-muted); text-align:right;">
+            SVN ENGINE: OPERATIONAL<br>
+            <button onclick="openSettings()" style="padding:4px 8px; font-size:9px; background:#EEE; margin-top:5px;">HUB AYARLARI ⚙️</button>
+            <button onclick="location.href='/api/auth/logout'" style="padding:4px 8px; font-size:9px; background:#FEE2E2; color:#DC2626;">ÇIKIŞ</button>
+        </div>
+    </div>
+    <div class="container grid" id="project-grid"></div>
+
+    <modal id="add-modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0; font-weight:900; color:var(--brand-deep);">Yeni Yerel Ayna Ekle</h2>
+            <div class="form-group"><label class="form-label">PROJE ADI</label><input type="text" id="p-name" placeholder="Örn: Master_Root"></div>
+            <div class="form-group"><label class="form-label">UZAK SVN URL</label><input type="text" id="p-url" placeholder="https://riouxsvn.com/target/repo"></div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                <div class="form-group"><label class="form-label">GÜNCELLEME SIKLIĞI (DK)</label><input type="number" id="p-interval" value="20"></div>
+                <div class="form-group"><label class="form-label">ERİŞİM YÖNETİMİ</label><div style="padding:14px; font-size:11px; font-weight:900; color:var(--brand-primary);">SMART AUTH ACTIVE</div></div>
+            </div>
+            <div class="modal-footer"><button onclick="saveProject()" style="background:var(--brand-primary); color:white; flex:2; height:50px;">BAŞLAT</button><button onclick="closeModal('add-modal')" style="background:#EEE; flex:1;">İPTAL</button></div>
+        </div>
+    </modal>
+
+    <modal id="settings-modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0; font-weight:900; color:var(--brand-deep);">Shadow SVN Ayarları</h2>
+            <div class="form-group">
+                <label class="form-label">DASHBOARD ŞİFRESİ</label>
+                <input type="password" id="s-pass" placeholder="Şifre girin (boş = şifresiz açık erişim)">
+            </div>
+            <p style="font-size:11px; color:#90A4AE; font-weight:700;">* Boş bırakırsanız login ekranı devre dışı kalır, dashboard herkese açık olur.</p>
+            <div class="modal-footer"><button onclick="saveSettings()" style="background:var(--brand-primary); color:white; flex:1; height:50px;">AYARLARI KAYDET</button><button onclick="closeModal('settings-modal')" style="background:#EEE; flex:1;">KAPAT</button></div>
+        </div>
+    </modal>
+
+    <script>
+        async function loadProjects() {
+            try {
+                const res = await fetch('/api/projects'); if(!res.ok) return;
+                const data = await res.json(); const grid = document.getElementById('project-grid'); grid.innerHTML = '';
+                data.forEach(p => {
+                    grid.innerHTML += `
+                        <div class="card">
+                            <div class="card-header">
+                                <div><span class="project-name">${p.id}</span><div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div></div>
+                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNCEL' : 'SENKRONİZE OLUYOR'}</span>
+                            </div>
+                            <div class="stat-line">
+                                <div><span style="font-size:10px; font-weight:900; color:#AAA;">LOKAL</span><div class="val">${p.local}</div></div>
+                                <div style="text-align:right;"><span style="font-size:10px; font-weight:900; color:#AAA;">UZAK</span><div class="val">${p.remote}</div></div>
+                            </div>
+                            <div class="msg-box">${p.message}</div>
+                            <div class="url-row">Check-out: ${p.checkout_url}</div>
+                            <div class="ctrls"><button class="btn-fire" onclick="manualSync('${p.id}')">HEMEN SYNC</button><button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button></div>
+                        </div>`;
+                });
+                grid.innerHTML += `<div class="card add-card" onclick="openAdd()"><div style="font-size:60px; color:var(--brand-primary)">+</div><div style="font-weight:900; color:var(--brand-primary);">YENİ AYNA EKLE</div></div>`;
+            } catch(e) {}
+        }
+        function openAdd() { document.getElementById('add-modal').style.display='flex'; }
+        function openSettings() { document.getElementById('settings-modal').style.display='flex'; }
+        function closeModal(id) { document.getElementById(''+id).style.display='none'; }
+        async function saveProject() {
+            const payload = { name: document.getElementById('p-name').value, url: document.getElementById('p-url').value, interval: document.getElementById('p-interval').value * 60 };
+            const res = await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+            if(res.ok) { closeModal('add-modal'); loadProjects(); } else { alert("Hata: " + (await res.json()).error); }
+        }
+        async function saveSettings() {
+            const payload = { dashboard_pass: document.getElementById('s-pass').value };
+            await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+            alert("Ayarlar Kaydedildi! Şifre değiştiyse tekrar giriş yapmanız gerekebilir.");
+            location.reload();
+        }
+        async function manualSync(id) { await fetch('/api/sync/manual?name=' + id, { method:'POST' }); alert("Senkronizasyon Başladı!"); }
+        async function deleteProject(id) { if(confirm(id + " silinsin mi?")) { await fetch('/api/projects/'+id, { method:'DELETE' }); loadProjects(); } }
+        setInterval(loadProjects, 5000); loadProjects();
+    </script>
+</body>
+</html>
+"""
+
+if __name__ == '__main__':
+    update_scheduler(); app.run(host='0.0.0.0', port=80)
