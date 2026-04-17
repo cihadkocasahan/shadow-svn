@@ -169,9 +169,20 @@ def run_sync_task(name):
         ACTIVE_SYNCS.remove(name) if name in ACTIVE_SYNCS else None
 
 def update_scheduler():
-    config = load_config(); scheduler.remove_all_jobs()
+    config = load_config(); current_jobs = {job.id: job for job in scheduler.get_jobs()}
     for name, p in config["projects"].items():
-        if p.get("enabled"): scheduler.add_job(id=f"sync_{name}", func=run_sync_task, args=[name], trigger=IntervalTrigger(seconds=int(p['interval'])), next_run_time=datetime.now(), replace_existing=True)
+        job_id = f"sync_{name}"
+        if p.get("enabled"):
+            interval = int(p['interval'])
+            if job_id not in current_jobs:
+                # New or just enabled: trigger immediately + schedule
+                scheduler.add_job(id=job_id, func=run_sync_task, args=[name], trigger=IntervalTrigger(seconds=interval), next_run_time=datetime.now(), replace_existing=True)
+            elif current_jobs[job_id].trigger.interval.total_seconds() != interval:
+                # Interval changed: update trigger
+                scheduler.reschedule_job(job_id, trigger=IntervalTrigger(seconds=interval))
+        else:
+            # Disabled: remove if exists
+            if job_id in current_jobs: scheduler.remove_job(job_id)
 
 @app.route('/')
 def home(): return render_template_string(HTML_TEMPLATE)
@@ -471,7 +482,12 @@ HTML_TEMPLATE = """
                         </div>`;
                 });
                 grid.innerHTML += `<div class="card add-card" onclick="openAdd()"><div style="font-size:60px; color:var(--brand-primary)">+</div><div style="font-weight:900; color:var(--brand-primary);">YENİ MİRROR EKLE</div></div>`;
-            } catch(e) {}
+                
+                // Adaptive refresh: faster when sync is running
+                const anyRunning = data.some(p => p.is_running);
+                clearTimeout(window.refreshTimer);
+                window.refreshTimer = setTimeout(loadProjects, anyRunning ? 3000 : 30000);
+            } catch(e) { window.refreshTimer = setTimeout(loadProjects, 30000); }
         }
         function openAdd() {
             ['p-name','p-url','p-user','p-pass'].forEach(id => document.getElementById(id).value = '');
@@ -554,7 +570,7 @@ HTML_TEMPLATE = """
                 loadProjects();
             });
         }
-        setInterval(loadProjects, 5000); loadProjects();
+        loadProjects();
     </script>
 </body>
 </html>
