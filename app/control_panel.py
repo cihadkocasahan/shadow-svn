@@ -46,6 +46,7 @@ DATA_ROOT = "/data"
 REPO_ROOT = os.path.join(DATA_ROOT, "svn")
 CONFIG_FILE = os.path.join(DATA_ROOT, "config.json")
 ACTIVE_SYNCS = set() # Track running tasks globally
+from datetime import datetime
 
 os.makedirs(REPO_ROOT, exist_ok=True)
 if not os.path.exists(CONFIG_FILE):
@@ -170,7 +171,7 @@ def run_sync_task(name):
 def update_scheduler():
     config = load_config(); scheduler.remove_all_jobs()
     for name, p in config["projects"].items():
-        if p.get("enabled"): scheduler.add_job(id=f"sync_{name}", func=run_sync_task, args=[name], trigger=IntervalTrigger(seconds=int(p['interval'])), replace_existing=True)
+        if p.get("enabled"): scheduler.add_job(id=f"sync_{name}", func=run_sync_task, args=[name], trigger=IntervalTrigger(seconds=int(p['interval'])), next_run_time=datetime.now(), replace_existing=True)
 
 @app.route('/')
 def home(): return render_template_string(HTML_TEMPLATE)
@@ -455,7 +456,7 @@ HTML_TEMPLATE = """
                             </div>
                             <div class="ctrls">
                                 <button class="btn-fire" onclick="manualSync('${p.id}')" ${p.is_running ? 'disabled' : ''} title="Hemen Sync">
-                                    <svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                    <svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
                                 </button>
                                 <button class="btn-toggle" style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')" title="${p.enabled ? 'Duraklat' : 'Devam Et'}">
                                     ${p.enabled ? '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>' : '<svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"></path></svg>'}
