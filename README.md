@@ -10,11 +10,27 @@ A lightweight, autonomous SVN mirroring engine. Clone any remote SVN repository 
 
 ### The Problem
 
-Working with large or remote SVN repositories is slow. Every checkout, update, or branch switch hits the remote server. When the server is down or the network is slow, development stops entirely.
+Working with large or remote SVN repositories is slow. Every checkout, update, or branch switch requires a connection to the remote server. When the server is unreachable or the network is slow, development stops entirely.
+
+Beyond performance, there are two more common pain points:
+- **Free SVN hosting services** (like RiouxSVN) have no built-in backup. If the service shuts down, your history is gone.
+- **Monorepo overload:** You only care about one branch or subfolder, but you're forced to deal with the entire repository structure.
 
 ### The Solution
 
-Shadow SVN creates and maintains a **local mirror** of any SVN repository. Your tools (IDE, TortoiseSVN, Jenkins) connect to the local mirror instead of the remote. Syncing happens automatically in the background.
+Shadow SVN lets you create a **precise, local mirror** of exactly the part of an SVN repository you care about — not the whole thing. You define the remote URL (root, branch, tag — anything), and Shadow SVN mirrors just that.
+
+- Back up your repos from free SVN hosting services automatically
+- Mirror only the branch or subfolder you actually work with
+- Organize multiple remotes locally, each with its own sync schedule
+- Work offline — your local mirror is always available
+
+### Who Is This For?
+
+- Developers working with **free SVN hosting** (RiouxSVN, etc.) who want a local backup
+- Teams dealing with **slow or unreliable remote SVN servers**
+- Developers who want to **cherry-pick specific branches** from large monorepos
+- Anyone who wants to organize and mirror multiple SVN sources **on their own terms**
 
 - ✅ Any SVN URL supported (root, trunk, branch, tag)
 - ✅ Automatic background sync (configurable interval)
@@ -77,9 +93,25 @@ The setup script (`setup.ps1` / `setup.sh`) will:
 
 Büyük veya uzak SVN depolarıyla çalışmak yavaştır. Her checkout, güncelleme veya dal değişimi uzak sunucuya bağlanmak zorunda kalır. Sunucu erişilemez olduğunda ya da ağ yavaş çalıştığında geliştirme tamamen durur.
 
+Performansın ötesinde, iki yaygın sorun daha var:
+- Ücretsiz SVN barındırma hizmetlerinde **(RiouxSVN gibi)** yerleşik yedekleme yoktur. Hizmet kapanırsa geçmişiniz gider.
+- **Monorepo yükü:** Yalnızca tek bir dal veya alt klasörle ilgileniyorsunuzdur; ancak reponun tamamıyla uğraşmak zorundasınız.
+
 ### Çözüm
 
-Shadow SVN, herhangi bir SVN deposunun **yerel bir aynasını (mirror)** oluşturur ve otomatik olarak güncel tutar. IDE, TortoiseSVN veya Jenkins gibi araçlarınız uzak sunucu yerine yerel aynaya bağlanır. Senkronizasyon arka planda otomatik gerçekleşir.
+Shadow SVN, bir SVN deposunun **tam olarak ilgilen diğiniz kısmının** yerel bir aynasını oluşturmanızı sağlar. Uzak URL'yi siz belirlersiniz (root, branch, tag — herhangi biri), Shadow SVN yalnızca o kısmı aynalar.
+
+- Ücretsiz SVN barındırma hizmetlerindeki repolarınızı otomatik yedekleyin
+- Yalnızca çalıştığınız dalı veya alt klasörü aynala
+- Birden fazla uzak kaynağı her birine özel senkronizasyon takvimi ile lokalde organize edin
+- Offline çalışın — yerel aynanız her zaman erişilebilirdir
+
+### Kimler İçin?
+
+- Ücretsiz SVN barındırma (RiouxSVN vb.) kullanan ve **yerel yedek** isteyen geliştiriciler
+- **Yavaş veya güvenilmez uzak SVN sunucularıyla** çalışan takımlar
+- Büyük monorepolarda **yalnızca belirli dalları** almak isteyen geliştiriciler
+- Birden fazla SVN kaynağını **kendi düzenine göre** lokalde yönetmek isteyenler
 
 - ✅ Her türlü SVN URL desteklenir (root, trunk, branch, tag)
 - ✅ Otomatik arka plan senkronizasyonu (ayarlanabilir aralık)
