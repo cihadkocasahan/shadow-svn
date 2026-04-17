@@ -385,7 +385,11 @@ HTML_TEMPLATE = """
                 grid.innerHTML += `<div class="card add-card" onclick="openAdd()"><div style="font-size:60px; color:var(--brand-primary)">+</div><div style="font-weight:900; color:var(--brand-primary);">YENİ AYNA EKLE</div></div>`;
             } catch(e) {}
         }
-        function openAdd() { document.getElementById('add-modal').style.display='flex'; }
+        function openAdd() {
+            ['p-name','p-url','p-user','p-pass'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('p-interval').value = 20;
+            document.getElementById('add-modal').style.display='flex';
+        }
         function openSettings() { document.getElementById('settings-modal').style.display='flex'; }
         function closeModal(id) { document.getElementById(''+id).style.display='none'; }
         async function saveProject() {

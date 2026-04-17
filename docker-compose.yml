@@ -22,11 +22,11 @@ services:
 
   sync-engine:
     # Pull from GHCR (no source code needed):
-    image: ghcr.io/cihadkocasahan/shadow-svn:latest
-    # Or build from source (comment out image, uncomment build):
-    # build:
-    #   context: ./app
-    #   dockerfile: Dockerfile
+    # image: ghcr.io/cihadkocasahan/shadow-svn:latest
+    # Build from source (for development / local changes):
+    build:
+      context: ./app
+      dockerfile: Dockerfile
     container_name: Shadow-Sync-Engine
     restart: always
     ports:
