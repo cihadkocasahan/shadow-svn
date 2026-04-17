@@ -16,7 +16,7 @@ services:
     hostname: shadow-server
     volumes:
       - ./data/svn:/home/svn
-      - ./hub-server/apache-servername.conf:/etc/apache2/conf.d/servername.conf:ro
+      - ./server/apache-servername.conf:/etc/apache2/conf.d/servername.conf:ro
     networks:
       - shadow-sync-net
 
