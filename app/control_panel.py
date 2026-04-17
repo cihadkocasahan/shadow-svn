@@ -433,7 +433,7 @@ HTML_TEMPLATE = """
                                 <button class="btn-copy" onclick="copyTo('${p.checkout_url}')">KOPYALA</button>
                             </div>
                             <div class="ctrls">
-                                <button class="btn-fire" onclick="manualSync('${p.id}')" ${p.enabled ? '' : 'disabled'}>BAŞLAT</button>
+                                <button class="btn-fire" onclick="manualSync('${p.id}')">BAŞLAT</button>
                                 <button style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')">${p.enabled ? 'DURAKLAT' : 'DEVAM ET'}</button>
                                 <button style="background:#F1F5F9; color:#475569;" onclick="openEdit('${p.id}', ${p.interval/60})">⚙️</button>
                                 <button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button>
