@@ -1,0 +1,40 @@
+# Shadow SVN - Global Standard GitIgnore (v3.1)
+# -------------------------------------------
+
+# Persistent Data (Strictly Untracked)
+data/
+Data/
+config.json
+
+# Environment & Secrets (Security)
+.env
+.secret.key
+data/.secret.key
+*.local
+credentials.json
+secrets.txt
+
+# Python & System
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Temporary & Logs
+logs/
+*.log
+_temp/
+*.tmp
+*.bak
+hub_bak/
+
+# Development Tools
+.vscode/
+.idea/
+.project
+.pydevproject
+.settings/
+venv/
+node_modules/

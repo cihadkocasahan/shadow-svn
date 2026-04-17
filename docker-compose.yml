@@ -1,0 +1,40 @@
+name: shadow-svn
+version: "3"
+
+networks:
+  shadow-sync-net:
+    driver: bridge
+
+services:
+  shadow-server:
+    image: elleflorio/svn-server
+    container_name: Shadow-Server
+    restart: always
+    ports:
+      - "13080:80"
+      - "3690:3690"
+    hostname: shadow-server
+    volumes:
+      - ./data/svn:/home/svn
+      - ./hub-server/apache-servername.conf:/etc/apache2/conf.d/servername.conf:ro
+    networks:
+      - shadow-sync-net
+
+  sync-engine:
+    build: 
+      context: ./hub-engine
+      dockerfile: Dockerfile
+    container_name: Shadow-Sync-Engine
+    restart: always
+    ports:
+      - "13081:80"
+    environment:
+      - RIOUX_SVN_USER=${RIOUX_SVN_USER}
+      - RIOUX_SVN_PASS=${RIOUX_SVN_PASS}
+      - TZ=Europe/Istanbul
+    volumes:
+      - ./data:/data
+    networks:
+      - shadow-sync-net
+    depends_on:
+      - shadow-server
