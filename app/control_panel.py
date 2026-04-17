@@ -205,6 +205,14 @@ def api_projects_manager():
             if not success: return jsonify({"error": "Repo Oluşturulamadı"}), 500
         save_config(config); update_scheduler(); return jsonify({"status": "ok"})
 
+@app.route('/api/projects/<name>/toggle', methods=['POST'])
+def api_toggle_project(name):
+    config = load_config()
+    if name in config["projects"]:
+        config["projects"][name]["enabled"] = not config["projects"][name].get("enabled", True)
+        save_config(config); update_scheduler(); return jsonify({"status": "ok", "enabled": config["projects"][name]["enabled"]})
+    return jsonify({"error": "Not Found"}), 404
+
 @app.route('/api/projects/<name>', methods=['DELETE'])
 def api_delete_project(name):
     config = load_config()
@@ -283,8 +291,9 @@ HTML_TEMPLATE = """
         .container { width: 100%; max-width: 1200px; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid var(--card-border); padding-bottom: 15px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
-        .card { background: var(--card-bg); border-radius: 20px; border: 1px solid var(--card-border); padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; transition: transform 0.2s; }
+        .card { background: var(--card-bg); border-radius: 20px; border: 1px solid var(--card-border); padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; transition: all 0.2s; }
         .card:hover { transform: translateY(-3px); }
+        .card.disabled { opacity: 0.6; filter: grayscale(0.5); border-style: dashed; }
         .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
         .project-name { font-size: 18px; font-weight: 900; color: var(--brand-deep); text-transform: uppercase; }
         .sync-badge { font-size: 10px; font-weight: 900; padding: 4px 10px; border-radius: 12px; background: #EEE; color: #777; }
@@ -326,12 +335,12 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <div id="toast"></div>
-    <div id="confirm-modal"><div class="box"><h3 id="confirm-title">Emin misiniz?</h3><p id="confirm-msg"></p><div class="actions"><button onclick="confirmAction()" style="background:#dc2626;color:white;">SİL</button><button onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#EEE;">VAZGEÇ</button></div></div></div>
+    <div id="confirm-modal"><div class="box"><h3 id="confirm-title">Emin misiniz?</h3><p id="confirm-msg"></p><div class="actions"><button id="confirm-btn" onclick="confirmAction()" style="background:#dc2626;color:white;">SİL</button><button onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#EEE;">VAZGEÇ</button></div></div></div>
     <div class="container grid" id="project-grid"></div>
 
     <modal id="add-modal">
         <div class="modal-content">
-            <h2 style="margin-top:0; font-weight:900; color:var(--brand-deep);">Yeni Yerel Ayna Ekle</h2>
+            <h2 style="margin-top:0; font-weight:900; color:var(--brand-deep);">Yeni Mirror Ekle</h2>
             <div class="form-group"><label class="form-label">PROJE ADI</label><input type="text" id="p-name" placeholder="Örn: Master_Root"></div>
             <div class="form-group"><label class="form-label">UZAK SVN URL</label><input type="text" id="p-url" placeholder="https://svn.example.com/repo/trunk"></div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
@@ -368,10 +377,10 @@ HTML_TEMPLATE = """
                 const data = await res.json(); const grid = document.getElementById('project-grid'); grid.innerHTML = '';
                 data.forEach(p => {
                     grid.innerHTML += `
-                        <div class="card">
+                        <div class="card ${p.enabled ? '' : 'disabled'}">
                             <div class="card-header">
                                 <div><span class="project-name">${p.id}</span><div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div></div>
-                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNCEL' : 'SYNC...'}</span>
+                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.enabled ? (p.is_synced ? '✓ GÜNCEL' : 'SYNC...') : 'DURDURULDU'}</span>
                             </div>
                             <div class="stat-line">
                                 <div><span style="font-size:10px; font-weight:900; color:#AAA;">LOKAL</span><div class="val">${p.local}</div></div>
@@ -379,10 +388,14 @@ HTML_TEMPLATE = """
                             </div>
                             <div class="msg-box">${p.message}</div>
                             <div class="url-row">Check-out: ${p.checkout_url}</div>
-                            <div class="ctrls"><button class="btn-fire" onclick="manualSync('${p.id}')">HEMEN SYNC</button><button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button></div>
+                            <div class="ctrls">
+                                <button class="btn-fire" onclick="manualSync('${p.id}')" ${p.enabled ? '' : 'disabled'}>BAŞLAT</button>
+                                <button style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')">${p.enabled ? 'DURAKLAT' : 'DEVAM ET'}</button>
+                                <button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button>
+                            </div>
                         </div>`;
                 });
-                grid.innerHTML += `<div class="card add-card" onclick="openAdd()"><div style="font-size:60px; color:var(--brand-primary)">+</div><div style="font-weight:900; color:var(--brand-primary);">YENİ AYNA EKLE</div></div>`;
+                grid.innerHTML += `<div class="card add-card" onclick="openAdd()"><div style="font-size:60px; color:var(--brand-primary)">+</div><div style="font-weight:900; color:var(--brand-primary);">YENİ MİRROR EKLE</div></div>`;
             } catch(e) {}
         }
         function openAdd() {
@@ -420,14 +433,19 @@ HTML_TEMPLATE = """
         fetch('/api/settings').then(r=>r.json()).then(s=>{
             document.getElementById('btn-logout').style.display = s.dashboard_pass_set ? 'inline-block' : 'none';
         });
+        async function toggleProject(id) {
+            await fetch(\`/api/projects/\${id}/toggle\`, { method:'POST' });
+            loadProjects();
+        }
         async function manualSync(id) {
             await fetch('/api/sync/manual?name=' + id, { method:'POST' });
             showToast('⚡ Senkronizasyon tetiklendi: ' + id);
         }
         let _confirmCb = null;
-        function askConfirm(title, msg, cb) {
+        function askConfirm(title, msg, cb, btnText='SİL') {
             document.getElementById('confirm-title').textContent = title;
             document.getElementById('confirm-msg').textContent = msg;
+            document.getElementById('confirm-btn').textContent = btnText;
             _confirmCb = cb;
             document.getElementById('confirm-modal').style.display = 'flex';
         }
