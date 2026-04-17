@@ -179,9 +179,9 @@ def api_projects_manager():
             l_rev, l_msg, l_auth = get_local_info(name)
             now = time.time(); ttl = 60; last_check = p.get("last_remote_check", 0)
             r_rev = p.get("last_remote_rev", "---"); r_auth = p.get("remote_author", "---")
-            # Skip remote checks if project is disabled (Pause logic)
+            is_synced = (l_auth == r_auth) and (l_auth != "---")
+            # If disabled, we still want to show the status but we don't fetch remote info automatically
             if not p.get("enabled"):
-                is_synced = p.get("local_author") == p.get("remote_author") and p.get("local_author") != "---"
                 out.append({"id": name, "url": p["url"], "enabled": False, "interval": p["interval"], "local": p.get("last_local_rev", "---"), "remote": r_rev, "message": p.get("last_msg", "..."), "is_synced": is_synced, "check_age": int(now - last_check), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
                 continue
 
@@ -314,6 +314,9 @@ HTML_TEMPLATE = """
         .card.disabled { opacity: 0.6; filter: grayscale(0.5); border-style: dashed; }
         .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
         .project-name { font-size: 18px; font-weight: 900; color: var(--brand-deep); text-transform: uppercase; }
+        .scheduler-tag { font-size: 9px; font-weight: 900; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block; }
+        .scheduler-on { background: #E3F2FD; color: #1976D2; border: 1px solid #BBDEFB; }
+        .scheduler-off { background: #ECEFF1; color: #546E7A; border: 1px solid #CFD8DC; }
         .sync-badge { font-size: 10px; font-weight: 900; padding: 4px 10px; border-radius: 12px; background: #EEE; color: #777; }
         .synced { background: #E8F5E9; color: var(--synced-green); display: block; }
         .stat-line { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: baseline; }
@@ -419,9 +422,12 @@ HTML_TEMPLATE = """
                                 <div>
                                     <span class="project-name">${p.id}</span>
                                     <div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div>
-                                    <div style="font-size:9px; font-weight:900; color:var(--brand-primary); margin-top:4px;">⏱️ ${p.interval/60} DK GÜNCELLEME</div>
+                                    <div class="scheduler-tag ${p.enabled ? 'scheduler-on' : 'scheduler-off'}">
+                                        ${p.enabled ? '⏱️ OTOMATİK AKTİF' : '❌ OTOMATİK KAPALI'}
+                                    </div>
+                                    <div style="font-size:9px; font-weight:900; color:var(--brand-primary); margin-top:4px;">⏱️ Her ${p.interval/60} dk bir.</div>
                                 </div>
-                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.enabled ? (p.is_synced ? '✓ GÜNCEL' : 'SYNC...') : 'DURDURULDU'}</span>
+                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNCEL' : 'SYNC...'}</span>
                             </div>
                             <div class="stat-line">
                                 <div><span style="font-size:10px; font-weight:900; color:#AAA;">LOKAL</span><div class="val">${p.local}</div></div>
@@ -433,7 +439,7 @@ HTML_TEMPLATE = """
                                 <button class="btn-copy" onclick="copyTo('${p.checkout_url}')">KOPYALA</button>
                             </div>
                             <div class="ctrls">
-                                <button class="btn-fire" onclick="manualSync('${p.id}')">BAŞLAT</button>
+                                <button class="btn-fire" onclick="manualSync('${p.id}')">HEMEN SYNC</button>
                                 <button style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')">${p.enabled ? 'DURAKLAT' : 'DEVAM ET'}</button>
                                 <button style="background:#F1F5F9; color:#475569;" onclick="openEdit('${p.id}', ${p.interval/60})">⚙️</button>
                                 <button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button>
