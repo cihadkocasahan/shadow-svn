@@ -320,11 +320,13 @@ HTML_TEMPLATE = """
         <div class="modal-content">
             <h2 style="margin-top:0; font-weight:900; color:var(--brand-deep);">Yeni Yerel Ayna Ekle</h2>
             <div class="form-group"><label class="form-label">PROJE ADI</label><input type="text" id="p-name" placeholder="Örn: Master_Root"></div>
-            <div class="form-group"><label class="form-label">UZAK SVN URL</label><input type="text" id="p-url" placeholder="https://riouxsvn.com/target/repo"></div>
+            <div class="form-group"><label class="form-label">UZAK SVN URL</label><input type="text" id="p-url" placeholder="https://svn.example.com/repo/trunk"></div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-                <div class="form-group"><label class="form-label">GÜNCELLEME SIKLIĞI (DK)</label><input type="number" id="p-interval" value="20"></div>
-                <div class="form-group"><label class="form-label">ERİŞİM YÖNETİMİ</label><div style="padding:14px; font-size:11px; font-weight:900; color:var(--brand-primary);">SMART AUTH ACTIVE</div></div>
+                <div class="form-group"><label class="form-label">SVN KULLANICI ADI</label><input type="text" id="p-user" placeholder="Kullanıcı adı"></div>
+                <div class="form-group"><label class="form-label">SVN ŞİFRESİ</label><input type="password" id="p-pass" placeholder="Şifre"></div>
             </div>
+            <div class="form-group"><label class="form-label">GÜNCELLEME SIKLIĞI (DAKİKA)</label><input type="number" id="p-interval" value="20" min="1"></div>
+            <p style="font-size:11px; color:#90A4AE; font-weight:700;">* Kullanıcı adı ve şifre girilmezse .env (SVN_USER/SVN_PASS) değerleri kullanılır.</p>
             <div class="modal-footer"><button onclick="saveProject()" style="background:var(--brand-primary); color:white; flex:2; height:50px;">BAŞLAT</button><button onclick="closeModal('add-modal')" style="background:#EEE; flex:1;">İPTAL</button></div>
         </div>
     </modal>
@@ -369,9 +371,20 @@ HTML_TEMPLATE = """
         function openSettings() { document.getElementById('settings-modal').style.display='flex'; }
         function closeModal(id) { document.getElementById(''+id).style.display='none'; }
         async function saveProject() {
-            const payload = { name: document.getElementById('p-name').value, url: document.getElementById('p-url').value, interval: document.getElementById('p-interval').value * 60 };
+            const payload = {
+                name: document.getElementById('p-name').value,
+                url: document.getElementById('p-url').value,
+                interval: document.getElementById('p-interval').value * 60,
+                username: document.getElementById('p-user').value,
+                password: document.getElementById('p-pass').value
+            };
+            if (!payload.name || !payload.url) { alert('Proje adı ve URL zorunludur.'); return; }
             const res = await fetch('/api/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-            if(res.ok) { closeModal('add-modal'); loadProjects(); } else { alert("Hata: " + (await res.json()).error); }
+            if(res.ok) { closeModal('add-modal'); loadProjects(); }
+            else {
+                const err = await res.json();
+                alert('Hata: ' + (err.error || 'Repo oluşturulamadı. SVN URL ve kimlik bilgilerini kontrol edin.'));
+            }
         }
         async function saveSettings() {
             const newPass = document.getElementById('s-pass').value;
