@@ -45,6 +45,17 @@ cd shadow-svn
 .\setup.ps1       # Windows
 ```
 
+### What Happens During Setup
+
+The setup script (`setup.ps1` / `setup.sh`) will:
+
+1. **Check prerequisites** — Verifies Git and Docker are installed. If not, prints the exact download link and command to fix it.
+2. **Configure credentials** — Asks for your remote SVN username and password, and an optional dashboard password.
+3. **Encrypt and store** — Credentials are **not** stored in plain text. The setup uses [Fernet symmetric encryption](https://cryptography.io/en/latest/fernet/) to encrypt all sensitive values before writing them to `.env`. A unique secret key is generated and saved to `data/.secret.key` (never committed to Git).
+4. **Launch** — Runs `docker compose up --build` and starts both containers.
+
+> 🔐 **Security note:** `.env` and `data/.secret.key` are both listed in `.gitignore` and will never be committed to your repository.
+
 ### Usage
 
 1. Open the dashboard: `http://localhost:13081`
@@ -98,6 +109,17 @@ cd shadow-svn
 ./setup.sh        # Linux/macOS
 .\setup.ps1       # Windows
 ```
+
+### Kurulum Sırasında Neler Olur?
+
+Kurulum betiği (`setup.ps1` / `setup.sh`) sırayla şunları yapar:
+
+1. **Gereksinim kontrolü** — Git ve Docker kurulu mu diye kontrol eder. Eksik varsa indirme linkini ve kurulum komutunu ekranda gösterir.
+2. **Yapılandırma** — Uzak SVN kullanıcı adı, şifre ve opsiyonel dashboard şifresi sorulur.
+3. **Şifrele ve kaydet** — Kimlik bilgileri düz metin olarak **saklanmaz**. Kurulum betiği, tüm hassas verileri `.env` dosyasına yazmadan önce [Fernet simetrik şifrelemesiyle](https://cryptography.io/en/latest/fernet/) şifreler. Benzersiz bir anahtar üretilir ve `data/.secret.key` dosyasına kaydedilir (Git'e hiçbir zaman gönderilmez).
+4. **Başlat** — `docker compose up --build` komutu çalıştırılır, her iki konteyner başlatılır.
+
+> 🔐 **Güvenlik notu:** `.env` ve `data/.secret.key` dosyaları `.gitignore` kapsamındadır ve deponuza hiçbir zaman eklenmez.
 
 ### Kullanım
 
