@@ -320,7 +320,7 @@ HTML_TEMPLATE = """
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
         .card { background: var(--card-bg); border-radius: 20px; border: 1px solid var(--card-border); padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; transition: all 0.2s; }
         .card:hover { transform: translateY(-3px); }
-        .card.disabled { opacity: 0.6; filter: grayscale(0.5); border-style: dashed; }
+        .card.disabled { border-style: dashed; border-color: #CFD8DC; }
         .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
         .project-name { font-size: 18px; font-weight: 900; color: var(--brand-deep); text-transform: uppercase; }
         .scheduler-tag { font-size: 9px; font-weight: 900; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block; }
