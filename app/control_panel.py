@@ -328,9 +328,9 @@ HTML_TEMPLATE = """
 <body>
     <div class="container header">
         <h1 style="font-weight:900; color:var(--brand-deep); margin:0;">Shadow SVN <span style="font-size:12px; opacity:0.6;">v0.1.1</span></h1>
-        <div style="font-size: 11px; font-weight:900; color:var(--text-muted); text-align:right;" id="header-actions">
-            <span id="status-dot">● ACTIVE</span><br>
-            <button onclick="openSettings()" style="padding:4px 8px; font-size:9px; background:#EEE; margin-top:5px;">AYARLAR ⚙️</button>
+        <div style="font-size: 11px; font-weight:900; color:var(--text-muted); text-align:right; display: flex; align-items: center; gap: 10px;" id="header-actions">
+            <span id="status-dot">● ACTIVE</span>
+            <button onclick="openSettings()" style="padding:4px 8px; font-size:9px; background:#EEE;">AYARLAR ⚙️</button>
             <button id="btn-logout" onclick="location.href='/api/auth/logout'" style="padding:4px 8px; font-size:9px; background:#FEE2E2; color:#DC2626; display:none;">ÇIKIŞ</button>
         </div>
     </div>
@@ -434,7 +434,7 @@ HTML_TEMPLATE = """
             document.getElementById('btn-logout').style.display = s.dashboard_pass_set ? 'inline-block' : 'none';
         });
         async function toggleProject(id) {
-            await fetch(\`/api/projects/\${id}/toggle\`, { method:'POST' });
+            await fetch(`/api/projects/${id}/toggle`, { method:'POST' });
             loadProjects();
         }
         async function manualSync(id) {
