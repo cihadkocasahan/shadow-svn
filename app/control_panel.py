@@ -179,6 +179,12 @@ def api_projects_manager():
             l_rev, l_msg, l_auth = get_local_info(name)
             now = time.time(); ttl = 60; last_check = p.get("last_remote_check", 0)
             r_rev = p.get("last_remote_rev", "---"); r_auth = p.get("remote_author", "---")
+            # Skip remote checks if project is disabled (Pause logic)
+            if not p.get("enabled"):
+                is_synced = p.get("local_author") == p.get("remote_author") and p.get("local_author") != "---"
+                out.append({"id": name, "url": p["url"], "enabled": False, "interval": p["interval"], "local": p.get("last_local_rev", "---"), "remote": r_rev, "message": p.get("last_msg", "..."), "is_synced": is_synced, "check_age": int(now - last_check), "checkout_url": f"svn://{request.host.split(':')[0]}:13080/{name}"})
+                continue
+
             if now - last_check > ttl or r_rev == "---":
                 try:
                     u, pw = get_credentials(p, config)
@@ -213,14 +219,26 @@ def api_toggle_project(name):
         save_config(config); update_scheduler(); return jsonify({"status": "ok", "enabled": config["projects"][name]["enabled"]})
     return jsonify({"error": "Not Found"}), 404
 
-@app.route('/api/projects/<name>', methods=['DELETE'])
-def api_delete_project(name):
+@app.route('/api/projects/<name>', methods=['PUT', 'DELETE'])
+def api_edit_delete_project(name):
     config = load_config()
-    if name in config["projects"]:
-        del config["projects"][name]; path = os.path.join(REPO_ROOT, name)
-        if os.path.exists(path): shutil.rmtree(path)
-        save_config(config); update_scheduler(); return jsonify({"status": "deleted"})
-    return jsonify({"error": "Not Found"}), 404
+    if name not in config["projects"]: return jsonify({"error": "Not Found"}), 404
+    
+    if request.method == 'PUT':
+        data = request.json
+        p = config["projects"][name]
+        p["interval"] = int(data.get("interval", p["interval"]))
+        if data.get("username") and data.get("password"):
+            domain = get_domain(p["url"])
+            config.setdefault("credentials", {})[domain] = {"u": data["username"], "p": data["password"]}
+            p["username"] = data["username"]
+            p["password"] = data["password"]
+        save_config(config); update_scheduler(); return jsonify({"status": "updated"})
+    
+    # DELETE logic
+    del config["projects"][name]; path = os.path.join(REPO_ROOT, name)
+    if os.path.exists(path): shutil.rmtree(path)
+    save_config(config); update_scheduler(); return jsonify({"status": "deleted"})
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def api_settings():
@@ -365,6 +383,19 @@ HTML_TEMPLATE = """
         </div>
     </modal>
 
+    <modal id="edit-modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0; font-weight:900; color:var(--brand-deep);">Proje Ayarlarını Düzenle</h2>
+            <input type="hidden" id="e-id">
+            <div class="form-group"><label class="form-label">GÜNCELLEME SIKLIĞI (DAKİKA)</label><input type="number" id="e-interval" min="1"></div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                <div class="form-group"><label class="form-label">SVN KULLANICI ADI</label><input type="text" id="e-user" placeholder="Değiştirmece boş bırak"></div>
+                <div class="form-group"><label class="form-label">SVN ŞİFRESİ</label><input type="password" id="e-pass" placeholder="Değiştirmece boş bırak"></div>
+            </div>
+            <div class="modal-footer"><button onclick="saveEdit()" style="background:var(--brand-primary); color:white; flex:2; height:50px;">GÜNCELLE</button><button onclick="closeModal('edit-modal')" style="background:#EEE; flex:1;">İPTAL</button></div>
+        </div>
+    </modal>
+
     <script>
         function showToast(msg, duration=3000) {
             const t = document.getElementById('toast');
@@ -379,7 +410,11 @@ HTML_TEMPLATE = """
                     grid.innerHTML += `
                         <div class="card ${p.enabled ? '' : 'disabled'}">
                             <div class="card-header">
-                                <div><span class="project-name">${p.id}</span><div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div></div>
+                                <div>
+                                    <span class="project-name">${p.id}</span>
+                                    <div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div>
+                                    <div style="font-size:9px; font-weight:900; color:var(--brand-primary); margin-top:4px;">⏱️ ${p.interval/60} DK GÜNCELLEME</div>
+                                </div>
                                 <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.enabled ? (p.is_synced ? '✓ GÜNCEL' : 'SYNC...') : 'DURDURULDU'}</span>
                             </div>
                             <div class="stat-line">
@@ -391,6 +426,7 @@ HTML_TEMPLATE = """
                             <div class="ctrls">
                                 <button class="btn-fire" onclick="manualSync('${p.id}')" ${p.enabled ? '' : 'disabled'}>BAŞLAT</button>
                                 <button style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')">${p.enabled ? 'DURAKLAT' : 'DEVAM ET'}</button>
+                                <button style="background:#F1F5F9; color:#475569;" onclick="openEdit('${p.id}', ${p.interval/60})">⚙️</button>
                                 <button class="btn-del" onclick="deleteProject('${p.id}')">SİL</button>
                             </div>
                         </div>`;
@@ -404,7 +440,26 @@ HTML_TEMPLATE = """
             document.getElementById('add-modal').style.display='flex';
         }
         function openSettings() { document.getElementById('settings-modal').style.display='flex'; }
+        function openEdit(id, currentInterval) {
+            document.getElementById('e-id').value = id;
+            document.getElementById('e-interval').value = currentInterval;
+            document.getElementById('e-user').value = '';
+            document.getElementById('e-pass').value = '';
+            document.getElementById('edit-modal').style.display='flex';
+        }
         function closeModal(id) { document.getElementById(''+id).style.display='none'; }
+        async function saveEdit() {
+            const id = document.getElementById('e-id').value;
+            const payload = {
+                interval: document.getElementById('e-interval').value * 60,
+                username: document.getElementById('e-user').value,
+                password: document.getElementById('e-pass').value
+            };
+            const res = await fetch(`/api/projects/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+            if(res.ok) { closeModal('edit-modal'); showToast('✅ Ayarlar güncellendi.'); loadProjects(); }
+            else { showToast('❌ Güncelleme başarısız.'); }
+        }
+
         async function saveProject() {
             const payload = {
                 name: document.getElementById('p-name').value,
