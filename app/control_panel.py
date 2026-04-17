@@ -275,7 +275,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang='tr'>
 <head>
-    <meta charset='UTF-8'><title>Shadow SVN v2.7</title>
+    <meta charset='UTF-8'><title>Shadow SVN Dashboard</title>
     <style>
         :root { --brand-primary: #0288D1; --brand-deep: #01579B; --page-bg: #F0F4F8; --card-bg: #FFFFFF; --card-border: #D0DFE8; --text-main: #012B3D; --text-muted: #546E7A; --accent-fire: #FF5722; --synced-green: #2E7D32; }
         * { box-sizing: border-box; }
@@ -307,6 +307,13 @@ HTML_TEMPLATE = """
         /* Toast */
         #toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(20px); background:#1e293b; color:white; padding:12px 24px; border-radius:12px; font-size:13px; font-weight:700; opacity:0; transition:all 0.3s; z-index:999; pointer-events:none; }
         #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+        /* Confirm Modal */
+        #confirm-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:200; align-items:center; justify-content:center; }
+        #confirm-modal .box { background:white; border-radius:20px; padding:30px; width:360px; text-align:center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+        #confirm-modal h3 { margin:0 0 8px; color:#012B3D; font-weight:900; }
+        #confirm-modal p { color:#546E7A; font-size:13px; margin-bottom:24px; }
+        #confirm-modal .actions { display:flex; gap:10px; }
+        #confirm-modal .actions button { flex:1; padding:12px; border-radius:10px; font-weight:800; font-size:12px; border:none; cursor:pointer; }
     </style>
 </head>
 <body>
@@ -319,6 +326,7 @@ HTML_TEMPLATE = """
         </div>
     </div>
     <div id="toast"></div>
+    <div id="confirm-modal"><div class="box"><h3 id="confirm-title">Emin misiniz?</h3><p id="confirm-msg"></p><div class="actions"><button onclick="confirmAction()" style="background:#dc2626;color:white;">SİL</button><button onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#EEE;">VAZGEÇ</button></div></div></div>
     <div class="container grid" id="project-grid"></div>
 
     <modal id="add-modal">
@@ -363,7 +371,7 @@ HTML_TEMPLATE = """
                         <div class="card">
                             <div class="card-header">
                                 <div><span class="project-name">${p.id}</span><div style="font-size:9px; color:#999; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${p.url}</div></div>
-                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNEL' : 'SYNC...'}</span>
+                                <span class="sync-badge ${p.is_synced ? 'synced' : ''}">${p.is_synced ? '✓ GÜNCEL' : 'SYNC...'}</span>
                             </div>
                             <div class="stat-line">
                                 <div><span style="font-size:10px; font-weight:900; color:#AAA;">LOKAL</span><div class="val">${p.local}</div></div>
@@ -412,11 +420,23 @@ HTML_TEMPLATE = """
             await fetch('/api/sync/manual?name=' + id, { method:'POST' });
             showToast('⚡ Senkronizasyon tetiklendi: ' + id);
         }
+        let _confirmCb = null;
+        function askConfirm(title, msg, cb) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-msg').textContent = msg;
+            _confirmCb = cb;
+            document.getElementById('confirm-modal').style.display = 'flex';
+        }
+        function confirmAction() {
+            document.getElementById('confirm-modal').style.display = 'none';
+            if(_confirmCb) _confirmCb();
+        }
         async function deleteProject(id) {
-            if(!confirm(id + ' silinsin mi?')) return;
-            await fetch('/api/projects/'+id, { method:'DELETE' });
-            showToast('🗑️ ' + id + ' silindi.');
-            loadProjects();
+            askConfirm('Projeyi Sil', id + ' projesi ve tüm yerel verileri silinecek. Emin misiniz?', async () => {
+                await fetch('/api/projects/'+id, { method:'DELETE' });
+                showToast('🗑️ ' + id + ' silindi.');
+                loadProjects();
+            });
         }
         setInterval(loadProjects, 5000); loadProjects();
     </script>
