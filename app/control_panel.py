@@ -319,7 +319,10 @@ HTML_TEMPLATE = """
         .stat-line { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: baseline; }
         .val { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 900; color: var(--brand-primary); }
         .msg-box { background: #F8FAFC; border-radius: 10px; padding: 12px; font-size: 12px; height: 100px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 15px; border: 1px solid #E2EBF1; color: var(--text-main); line-height: 1.4; }
-        .url-row { font-size: 10px; font-family: monospace; background: #f1f5f9; padding: 10px; border-radius: 6px; margin-bottom: 15px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; border-left: 3px solid var(--brand-primary); }
+        .url-row { font-size: 10px; font-family: monospace; background: #f1f5f9; padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 3px solid var(--brand-primary); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .url-text { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1; }
+        .btn-copy { background: white; border: 1px solid #D0DFE8; padding: 4px 8px; border-radius: 4px; color: var(--brand-primary); font-size: 9px; cursor: pointer; font-weight: 800; }
+        .btn-copy:hover { background: var(--brand-primary); color: white; }
         .ctrls { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
         .add-card { border: 2px dashed var(--brand-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: rgba(2, 136, 209, 0.03); min-height: 400px; }
         button { border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 11px; text-transform: uppercase; }
@@ -402,6 +405,9 @@ HTML_TEMPLATE = """
             t.textContent = msg; t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), duration);
         }
+        function copyTo(txt) {
+            navigator.clipboard.writeText(txt).then(() => showToast('📋 Kopyalandı!'));
+        }
         async function loadProjects() {
             try {
                 const res = await fetch('/api/projects'); if(!res.ok) return;
@@ -422,7 +428,10 @@ HTML_TEMPLATE = """
                                 <div style="text-align:right;"><span style="font-size:10px; font-weight:900; color:#AAA;">UZAK</span><div class="val">${p.remote}</div></div>
                             </div>
                             <div class="msg-box">${p.message}</div>
-                            <div class="url-row">Check-out: ${p.checkout_url}</div>
+                            <div class="url-row">
+                                <span class="url-text">${p.checkout_url}</span>
+                                <button class="btn-copy" onclick="copyTo('${p.checkout_url}')">KOPYALA</button>
+                            </div>
                             <div class="ctrls">
                                 <button class="btn-fire" onclick="manualSync('${p.id}')" ${p.enabled ? '' : 'disabled'}>BAŞLAT</button>
                                 <button style="background:${p.enabled ? '#ff9800' : '#4caf50'}; color:white;" onclick="toggleProject('${p.id}')">${p.enabled ? 'DURAKLAT' : 'DEVAM ET'}</button>
