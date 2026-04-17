@@ -21,7 +21,10 @@ services:
       - shadow-sync-net
 
   sync-engine:
-    build: 
+    # Option A - Pull from Docker Hub (recommended for end users):
+    # image: cihadkocasahan/shadow-svn:latest
+    # Option B - Build from source (default, for development):
+    build:
       context: ./app
       dockerfile: Dockerfile
     container_name: Shadow-Sync-Engine
