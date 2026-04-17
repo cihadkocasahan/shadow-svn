@@ -257,8 +257,14 @@ def api_edit_delete_project(name):
     
     # DELETE logic
     del config["projects"][name]; path = os.path.join(REPO_ROOT, name)
-    if os.path.exists(path): shutil.rmtree(path)
-    save_config(config); update_scheduler(); return jsonify({"status": "deleted"})
+    save_config(config); update_scheduler()
+    
+    # Run slow file deletion in background
+    def safe_remove(p):
+        if os.path.exists(p): shutil.rmtree(p)
+    threading.Thread(target=safe_remove, args=(path,)).start()
+    
+    return jsonify({"status": "deleted"})
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def api_settings():
