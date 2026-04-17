@@ -13,6 +13,7 @@ data/.secret.key
 *.local
 credentials.json
 secrets.txt
+resume.md
 
 # Python & System
 __pycache__/

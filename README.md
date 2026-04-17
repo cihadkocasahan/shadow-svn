@@ -1,6 +1,6 @@
 # Shadow SVN
 
-> **v0.1.0** · Free & Open Source · MIT License
+> **v0.1.2** · Free & Open Source · MIT License
 
 A lightweight, autonomous SVN mirroring engine. Clone any remote SVN repository to a fast, fully functional local mirror — with zero manual configuration after setup.
 
@@ -34,8 +34,12 @@ Shadow SVN lets you create a **precise, local mirror** of exactly the part of an
 
 - ✅ Any SVN URL supported (root, trunk, branch, tag)
 - ✅ Automatic background sync (configurable interval)
+- ✅ Real-time status tracking with visual indicators (Spinning icon)
+- ✅ Smart Scheduler — incremental updates without mass restarts
 - ✅ Smart credential caching — enter once per server, reused across all projects
-- ✅ Web dashboard for managing mirrors
+- ✅ Asynchronous project deletion for instant UI response
+- ✅ Web dashboard with modern SVG icons (Play, Pause, Resume, Settings)
+- ✅ Home navigation link and flexible layout
 - ✅ Fully portable — all data in one `./data` folder
 - ✅ Optional dashboard password (default: `admin`)
 
@@ -135,8 +139,12 @@ Shadow SVN, bir SVN deposunun **tam olarak ilgilen diğiniz kısmının** yerel 
 
 - ✅ Her türlü SVN URL desteklenir (root, trunk, branch, tag)
 - ✅ Otomatik arka plan senkronizasyonu (ayarlanabilir aralık)
+- ✅ Gerçek zamanlı durum takibi ve görsel bildirimler (Yükleme simgesi)
+- ✅ Akıllı Zamanlayıcı — sistemi yormayan kademeli güncellemeler
 - ✅ Akıllı kimlik bilgisi önbelleği — sunucu başına bir kez girilir, tüm projelerde geçerlidir
-- ✅ Ayna projelerini yönetmek için web arayüzü
+- ✅ Asenkron proje silme — UI donmadan anında temizlik
+- ✅ Modern SVG ikonları ile zenginleştirilmiş Dashboard
+- ✅ Başlık üzerinden ana sayfaya hızlı dönüş
 - ✅ Tamamen taşınabilir — tüm veriler `./data` klasöründe
 - ✅ Opsiyonel dashboard şifresi (varsayılan: `admin`)
 
@@ -200,3 +208,10 @@ Katkılarınızı bekliyoruz! Issue açabilir veya pull request gönderebilirsin
 
 *Shadow SVN is free software released under the MIT License.*  
 *Shadow SVN, MIT Lisansı kapsamında yayımlanan ücretsiz bir yazılımdır.*
+
+---
+
+### Roadmap / Yol Haritası
+- [ ] **Multi-language Support:** English and Turkish dashboard switching. (Planned)
+- [ ] **Email Notifications:** Get notified on sync errors.
+- [ ] **Multiple Users:** Basic user management for the dashboard.
