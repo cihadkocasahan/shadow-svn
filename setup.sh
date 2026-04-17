@@ -48,8 +48,8 @@ user_enc = fn.encrypt(b'${riouxUser}').decode()
 pass_enc = fn.encrypt(b'${riouxPass}').decode()
 
 with open('.env', 'w') as env:
-    env.write(f'RIOUX_SVN_USER={user_enc}\n')
-    env.write(f'RIOUX_SVN_PASS={pass_enc}\n')
+    env.write(f'SVN_USER={user_enc}\n')
+    env.write(f'SVN_PASS={pass_enc}\n')
 
 if not os.path.exists('data/config.json'):
     dash_enc = fn.encrypt(b'${dashPass}').decode() if '${dashPass}' else ''

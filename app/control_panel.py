@@ -85,8 +85,8 @@ def get_credentials(project_cfg, config):
     url = project_cfg.get("url", "")
     domain = get_domain(url)
     # Decrypt env vars transparently
-    env_user = _decrypt_env("RIOUX_SVN_USER")
-    env_pass = _decrypt_env("RIOUX_SVN_PASS")
+    env_user = _decrypt_env("SVN_USER")
+    env_pass = _decrypt_env("SVN_PASS")
     u = project_cfg.get("username") or config.get("credentials", {}).get(domain, {}).get("u") or env_user
     p = project_cfg.get("password") or config.get("credentials", {}).get(domain, {}).get("p") or env_pass
     return u, p

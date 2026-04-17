@@ -21,8 +21,8 @@ services:
       - shadow-sync-net
 
   sync-engine:
-    # Option A - Pull from Docker Hub (recommended for end users):
-    # image: cihadkocasahan/shadow-svn:latest
+    # Option A - Pull from GHCR (recommended for end users):
+    # image: ghcr.io/cihadkocasahan/shadow-svn:latest
     # Option B - Build from source (default, for development):
     build:
       context: ./app
@@ -32,8 +32,8 @@ services:
     ports:
       - "13081:80"
     environment:
-      - RIOUX_SVN_USER=${RIOUX_SVN_USER}
-      - RIOUX_SVN_PASS=${RIOUX_SVN_PASS}
+      - SVN_USER=${SVN_USER}
+      - SVN_PASS=${SVN_PASS}
       - TZ=Europe/Istanbul
     volumes:
       - ./data:/data

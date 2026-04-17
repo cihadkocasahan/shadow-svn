@@ -54,8 +54,8 @@ user_enc = f.encrypt(b'$riouxUser').decode()
 pass_enc = f.encrypt(b'$riouxPass').decode()
 
 with open('.env', 'w') as env:
-    env.write(f'RIOUX_SVN_USER={user_enc}\n')
-    env.write(f'RIOUX_SVN_PASS={pass_enc}\n')
+    env.write(f'SVN_USER={user_enc}\n')
+    env.write(f'SVN_PASS={pass_enc}\n')
 
 # Write initial config
 if not os.path.exists('data/config.json'):
